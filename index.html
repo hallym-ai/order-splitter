@@ -1,0 +1,953 @@
+<title>GSC 발주 파일 분리기</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  /* COFFEE EXPO SEOUL 2026 팔레트 · 스카이블루 #44AFFF · 딥브라운 #4E0E04 · 화이트 */
+  :root{
+    --ink:#4E0E04; --ink-2:#6b4436; --ink-3:#846258;
+    --paper:#f4f8fc; --surface:#ffffff; --surface-2:#e8f1fa;
+    --rule:#d5e3f0; --rule-2:#adc6dc;
+    --accent:#0a6fbf; --accent-2:#085497; --accent-soft:#e2f0ff;
+    --mark:#8a2010; --mark-bg:#f6e6e1; --on-accent:#ffffff;
+    --ok:#0a6fbf; --ok-bg:#e2f0ff;
+    --skip:#6f8397; --skip-bg:#e7eef5;
+    --sans:"IBM Plex Sans KR","Malgun Gothic","맑은 고딕",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,"Consolas",monospace;
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ink:#f6f2f0; --ink-2:#cbbab4; --ink-3:#a08d86;
+      --paper:#2a0b04; --surface:#3a140a; --surface-2:#4a1c10;
+      --rule:#5c2b1a; --rule-2:#80452f;
+      --accent:#44afff; --accent-2:#7ac6ff; --accent-soft:#10344f;
+      --mark:#ffb2a0; --mark-bg:#4e1a10; --on-accent:#2a0b04;
+      --ok:#44afff; --ok-bg:#10344f;
+      --skip:#b3a39d; --skip-bg:#3d2418;
+      color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ink:#f6f2f0; --ink-2:#cbbab4; --ink-3:#a08d86;
+    --paper:#2a0b04; --surface:#3a140a; --surface-2:#4a1c10;
+    --rule:#5c2b1a; --rule-2:#80452f;
+    --accent:#44afff; --accent-2:#7ac6ff; --accent-soft:#10344f;
+    --mark:#ffb2a0; --mark-bg:#4e1a10; --on-accent:#2a0b04;
+    --ok:#44afff; --ok-bg:#10344f;
+    --skip:#b3a39d; --skip-bg:#3d2418;
+    color-scheme:dark;
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);
+       font-size:14px;line-height:1.6;-webkit-text-size-adjust:100%}
+  .wrap{max-width:1040px;margin-inline:auto;padding-inline:20px;padding-block:34px 56px}
+
+  /* masthead */
+  .eyebrow{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.13em;
+           text-transform:uppercase;color:var(--accent)}
+  h1{margin:.3em 0 .25em;font-size:clamp(25px,4.4vw,34px);font-weight:700;letter-spacing:-.02em;
+     line-height:1.2;text-wrap:balance}
+  .lead{margin:0;max-width:78ch;color:var(--ink-2);text-wrap:pretty}
+  .masthead{border-bottom:2px solid var(--ink);padding-bottom:18px}
+  .masthead .sub{margin-top:14px;display:flex;flex-wrap:wrap;gap:4px 14px;
+                 font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+  .masthead .sub span{padding-left:14px;border-left:1px solid var(--rule-2)}
+  .masthead .sub span:first-child{padding-left:0;border-left:0}
+  .masthead .sub b{color:var(--accent);font-weight:600;letter-spacing:.04em;
+                   text-transform:uppercase;font-size:10.5px;margin-right:5px}
+
+  /* stages */
+  .stage{margin-top:30px}
+  .stage>h2{display:flex;align-items:baseline;gap:10px;margin:0 0 4px;
+            font-size:16px;font-weight:600;letter-spacing:-.01em}
+  .num{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--accent);
+       border:1px solid var(--accent);padding:1px 6px;letter-spacing:.06em;flex:none}
+  .hint{margin:0 0 12px;color:var(--ink-3);font-size:12.5px;max-width:70ch}
+
+  .panel{background:var(--surface);border:1px solid var(--rule);padding:16px}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media (max-width:640px){.grid2{grid-template-columns:1fr}}
+
+  .drop{background:var(--surface);border:1px dashed var(--rule-2);padding:14px 16px;
+        display:flex;flex-direction:column;gap:8px;min-height:104px}
+  .drop.on{border-style:solid;border-color:var(--accent);background:var(--accent-soft)}
+  .drop .k{font-size:12px;font-weight:600;letter-spacing:-.01em}
+  .drop .k em{font-style:normal;color:var(--mark);font-size:11px;margin-left:5px;font-weight:500}
+  .drop .k .opt{color:var(--ink-3);font-size:11px;margin-left:5px;font-weight:500}
+  .drop .fname{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);
+               word-break:break-all;flex:1}
+  .drop .fname.empty{color:var(--ink-3)}
+  input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+
+  .btn{font-family:var(--sans);font-size:12.5px;font-weight:600;letter-spacing:-.01em;
+       padding:6px 13px;border:1px solid var(--rule-2);background:var(--surface-2);
+       color:var(--ink);cursor:pointer;border-radius:2px}
+  .btn:hover{border-color:var(--ink-3)}
+  .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .btn.pri{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+  .btn.pri:hover{background:var(--accent-2);border-color:var(--accent-2)}
+  .btn[disabled]{opacity:.45;cursor:not-allowed}
+  .btn.sm{font-size:11.5px;padding:4px 9px}
+  .btn-row{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:16px}
+
+  .fnbox{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;
+         padding:11px 15px;border:1px solid var(--rule);background:var(--surface);
+         border-left:3px solid var(--rule-2)}
+  .fnbox .lbl{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--accent);
+              text-transform:uppercase}
+  .fnbox .fn{font-family:var(--mono);font-size:13px;color:var(--ink);word-break:break-all}
+  .fnbox .fn i{font-style:normal;color:var(--mark);background:var(--mark-bg);padding:0 4px}
+  .fnbox .why{font-size:11px;color:var(--ink-3);flex-basis:100%}
+
+  /* 미리보기 */
+  .pvtabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .pvtab{font-family:var(--sans);font-size:12px;font-weight:600;padding:5px 11px;
+         border:1px solid var(--rule-2);background:var(--surface);color:var(--ink-2);
+         cursor:pointer;border-radius:2px}
+  .pvtab[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+  .pvtab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .pvwrap{border:1px solid var(--rule-2);background:#fff;color:#1a1a1a;padding:14px;
+          overflow-x:auto}
+  .pvwrap .t1{font-size:15px;font-weight:700;color:#1F3864;margin-bottom:2px}
+  .pvwrap .t2{font-family:var(--mono);font-size:11px;color:#595959}
+  .pvwrap .t3{font-size:11px;color:#C00000;margin:2px 0 10px}
+  table.xl{border-collapse:collapse;min-width:640px;font-size:12px;
+           font-family:"Malgun Gothic","맑은 고딕",var(--sans)}
+  table.xl th,table.xl td{border:1px solid #BFBFBF;padding:4px 8px;white-space:nowrap}
+  table.xl th{background:#1F3864;color:#fff;font-weight:700;font-size:11px}
+  table.xl td{color:#1a1a1a;background:#fff}
+  table.xl td.num{text-align:center;font-variant-numeric:tabular-nums}
+  table.xl td.chg{background:#FFFF00;color:#C00000;font-weight:700}
+  table.xl td.rmk{color:#C00000;font-size:11px;white-space:normal;min-width:180px}
+  table.xl tr.tot td{background:#D9E2F3;font-weight:700}
+  .pvfoot{margin-top:8px;font-size:11px;color:#7F7F7F;font-style:italic}
+
+  /* results */
+  .banner{display:flex;flex-wrap:wrap;gap:4px 15px;align-items:baseline;
+          padding:10px 15px;border:1px solid var(--rule);border-left:3px solid var(--accent);
+          background:var(--surface);font-size:12.5px;margin-bottom:12px}
+  .banner>span{padding-left:15px;border-left:1px solid var(--rule)}
+  .banner>span:first-child{padding-left:0;border-left:0}
+  .banner .big{font-family:var(--mono);font-weight:600;font-size:14px;color:var(--ink)}
+  .banner .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;
+               text-transform:uppercase;color:var(--skip);background:var(--skip-bg);
+               padding:1px 7px;border:1px solid var(--rule)}
+
+  .tscroll{overflow-x:auto;border:1px solid var(--rule);background:var(--surface)}
+  table{border-collapse:collapse;width:100%;min-width:660px;font-size:12.5px}
+  thead th{background:var(--surface-2);color:var(--ink-2);font-weight:600;font-size:11px;
+           letter-spacing:.04em;text-align:left;padding:8px 10px;
+           border-bottom:1px solid var(--rule-2);white-space:nowrap}
+  tbody td{padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+  tbody tr:last-child td{border-bottom:0}
+  td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;
+            white-space:nowrap}
+  td.vendor{font-weight:600}
+  td.item{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);white-space:nowrap}
+  tr.skipped td{color:var(--ink-3)}
+  .chip{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:500;
+        letter-spacing:.05em;padding:1px 7px;border:1px solid transparent;white-space:nowrap}
+  .chip.gen{color:var(--ok);background:var(--ok-bg);border-color:var(--ok)}
+  .chip.skip{color:var(--skip);background:var(--skip-bg);border-color:var(--rule-2)}
+  .chip.mark{color:var(--mark);background:var(--mark-bg);border-color:var(--mark)}
+
+  .dbtn{background:none;border:0;padding:0;font:inherit;color:var(--accent);
+        cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+  .dbtn:disabled{color:var(--ink-3);cursor:not-allowed;text-decoration:none}
+
+  details.det{border-top:1px solid var(--rule);background:var(--surface)}
+  details.det summary{cursor:pointer;padding:7px 14px;font-size:12px;color:var(--ink-2);
+                      font-family:var(--mono)}
+  details.det summary::marker{color:var(--accent)}
+  .chlist{margin:0;padding:0 14px 12px 14px;list-style:none;display:grid;gap:4px}
+  .chlist li{font-size:12px;display:flex;gap:9px;flex-wrap:wrap}
+  .chlist code{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);flex:none}
+  .chlist .what{color:var(--mark)}
+
+  .hintlist{margin:0 0 14px;padding:0;list-style:none;display:grid;gap:5px;max-width:74ch}
+  .hintlist li{position:relative;padding-left:14px;font-size:12.5px;color:var(--ink-2)}
+  .hintlist li::before{content:"·";position:absolute;left:3px;color:var(--accent);font-weight:700}
+  .hintlist b{color:var(--ink);font-weight:600}
+
+  .waiting{border:1px dashed var(--rule-2);background:var(--surface);padding:22px 16px;
+           text-align:center;font-size:12.5px;color:var(--ink-3)}
+
+  .cbtn{margin-left:10px;font-family:var(--sans);font-size:10.5px;font-weight:600;
+        padding:2px 8px;border:1px solid var(--rule-2);background:var(--surface-2);
+        color:var(--ink-2);cursor:pointer;border-radius:2px;vertical-align:1px}
+  .cbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .cbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  .savenote{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+  .savelist{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;
+            padding-top:12px;border-top:1px solid var(--rule)}
+  .savelist .lbl2{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--accent);
+                  text-transform:uppercase;margin-right:2px}
+
+  .rules{margin-top:34px;border-top:1px solid var(--rule);padding-top:18px}
+  .rules h2{font-size:14px;font-weight:600;margin:0 0 10px}
+  .rules dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:12.5px}
+  .rules dt{font-weight:600;color:var(--ink-2);white-space:nowrap}
+  .rules dd{margin:0;color:var(--ink-2)}
+  .rules dd code{font-family:var(--mono);font-size:11.5px;background:var(--surface-2);
+                 padding:1px 5px;border:1px solid var(--rule);word-break:break-all}
+  .rules dd b{color:var(--mark);font-weight:600}
+  @media (max-width:560px){
+    .rules dl{grid-template-columns:1fr;gap:2px 0}
+    .rules dd{margin-bottom:8px}
+  }
+  .foot{margin-top:26px;font-size:11.5px;color:var(--ink-3);font-family:var(--mono);
+        border-top:1px solid var(--rule);padding-top:12px}
+  .err{margin-top:12px;padding:10px 13px;border:1px solid var(--mark);
+       background:var(--mark-bg);color:var(--mark);font-size:12.5px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="eyebrow">COEX · 참가업체 발주</div>
+    <h1>발주 파일 분리기</h1>
+    <p class="lead">마스터 파일을 품목별 발주처 파일로 분리하는 시스템입니다.<br>
+      직전 발송본과 사업자등록번호로 대조해 변경 셀만 표시하며, 변경 없는 발주처는 미생성합니다.</p>
+    <div class="sub">
+      <span><b>실행</b> 브라우저 내 처리 · 외부 전송 없음</span>
+      <span><b>설치</b> 불필요</span>
+      <span><b>대조 키</b> 사업자등록번호</span>
+    </div>
+  </header>
+
+  <section class="stage">
+    <h2><span class="num">01</span>파일 선택</h2>
+    <ul class="hintlist">
+      <li><b>현재 마스터 파일</b>만 업로드 시, 변경 사항 표기 없이 업체별 파일만 생성합니다.</li>
+      <li><b>직전 발송 마스터 파일</b>도 업로드 시, 변경 사항 표기하여 업체별 파일 생성합니다.</li>
+    </ul>
+    <div class="grid2">
+      <div class="drop" id="dropCurr">
+        <div class="k">현재 마스터 파일<em>필수</em></div>
+        <div class="fname empty" id="nameCurr">미선택</div>
+        <div><label class="btn sm" for="fileCurr">파일 선택</label>
+          <input type="file" id="fileCurr" accept=".xlsx,.xlsm">
+          <button class="btn sm" id="clearCurr" hidden>선택 해제</button></div>
+      </div>
+      <div class="drop" id="dropPrev">
+        <div class="k">직전 발송 마스터 파일<span class="opt">선택</span></div>
+        <div class="fname empty" id="namePrev">미선택</div>
+        <div><label class="btn sm" for="filePrev">파일 선택</label>
+          <input type="file" id="filePrev" accept=".xlsx,.xlsm">
+          <button class="btn sm" id="clearPrev" hidden>선택 해제</button></div>
+      </div>
+    </div>
+    <div class="err" id="err" hidden></div>
+  </section>
+
+  <section class="stage">
+    <h2><span class="num">02</span>결과 확인</h2>
+    <p class="hint">발주처별 변경 내역입니다. 파일과 함께 안내할 내용을 확인하세요.</p>
+    <div class="fnbox" id="fnbox" hidden>
+      <span class="lbl">파일명</span>
+      <span class="fn" id="fnPreview"></span>
+      <span class="why">마스터 파일명 뒤에 _발주처만 추가. 별도 입력 없음.</span>
+    </div>
+    <div class="banner" id="banner" hidden></div>
+    <div id="results"></div>
+  </section>
+
+  <section class="stage">
+    <h2><span class="num">03</span>파일별 미리보기</h2>
+    <p class="hint">저장 전 실제 파일 내용을 확인하세요.</p>
+    <div class="pvtabs" id="pvtabs"></div>
+    <div id="preview"></div>
+  </section>
+
+  <section class="stage">
+    <h2><span class="num">04</span>저장</h2>
+    <p class="hint">발주처 파일을 내려받습니다. 전체를 한 번에 받거나 발주처별로 받으세요.</p>
+    <div id="saveBox"></div>
+  </section>
+
+  <section class="rules">
+    <h2>적용 규칙</h2>
+    <dl>
+      <dt>파일명</dt><dd>마스터 파일명 + <b>_발주처</b>. 마스터가 <code>2027 서울커피엑스포 마스터 파일.xlsx</code>면 <code>2027 서울커피엑스포 마스터 파일_전기.xlsx</code>.</dd>
+      <dt>대조 키</dt><dd>사업자등록번호. 번호 일치 행끼리 비교. 번호 누락 또는 중복 시 생성 중단 후 해당 업체 표시.</dd>
+      <dt>공통 열</dt><dd>마스터 파일 A~N열 형식 그대로(연번 · 업체 특이사항 · KCA 회원사 · 업체명 · 배치 · 최종 부스번호 · 담당자 정보) + 사업자등록번호. 전 발주처 파일 공통 포함.</dd>
+      <dt>분리 기준</dt><dd>마스터 파일의 품목 열. 전기 · 급배수 · 압축공기 · LAN · 부스(독립 · 조립 · 프리미엄), 품목 1개 = 파일 1개. 전기는 주간 · 24시간 × 단상 · 삼상 6열 포함. 품목 변경 시 <b>업체매핑</b> 시트로 지정.</dd>
+      <dt>포함 행</dt><dd>해당 품목 수량 1 이상. 직전 1 이상 → 현재 0인 취소 건 포함.</dd>
+      <dt>변경 표시</dt><dd>빨간 글씨 + 노란 바탕. 수량 · 부스번호 변경, 신규 참가업체 대상.</dd>
+      <dt>취소 처리</dt><dd>행 유지, 수량 0. 비고에 직전 수량 기재.</dd>
+      <dt>건너뜀</dt><dd>해당 품목 변경 0건 시 파일 미생성.</dd>
+      <dt>행 삭제 감지</dt><dd>직전 수량 있음 + 현재 행 없음 → 취소 여부 확인 경고 행 삽입.</dd>
+    </dl>
+  </section>
+
+  <p class="foot" id="foot"></p>
+</div>
+
+<script>
+"use strict";
+/* ───────── 공통 ───────── */
+const $ = s => document.querySelector(s);
+const SHEET_MASTERS = ["마스터파일","발주마스터"], SHEET_MAP = "업체매핑";
+const xesc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+                           .replace(/"/g,"&quot;").replace(/'/g,"&apos;");
+const hesc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+function colName(n){let s="";while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=(n-m-1)/26;}return s;}
+
+/* ───────── ZIP 읽기 ───────── */
+async function unzip(buf){
+  const dv=new DataView(buf), u8=new Uint8Array(buf);
+  let eocd=-1, lo=Math.max(0,u8.length-66000);
+  for(let i=u8.length-22;i>=lo;i--){ if(dv.getUint32(i,true)===0x06054b50){eocd=i;break;} }
+  if(eocd<0) throw new Error("엑셀 파일 구조 판독 불가. .xlsx 파일 여부 확인 필요.");
+  const count=dv.getUint16(eocd+10,true); let off=dv.getUint32(eocd+16,true);
+  const out={}, td=new TextDecoder("utf-8");
+  for(let n=0;n<count;n++){
+    if(off+46>u8.length||dv.getUint32(off,true)!==0x02014b50) break;
+    const method=dv.getUint16(off+10,true), csize=dv.getUint32(off+20,true);
+    const nlen=dv.getUint16(off+28,true), elen=dv.getUint16(off+30,true), clen=dv.getUint16(off+32,true);
+    const lho=dv.getUint32(off+42,true);
+    const name=td.decode(u8.subarray(off+46,off+46+nlen));
+    const lnlen=dv.getUint16(lho+26,true), lelen=dv.getUint16(lho+28,true);
+    const ds=lho+30+lnlen+lelen;
+    out[name]={method,comp:u8.subarray(ds,ds+csize)};
+    off+=46+nlen+elen+clen;
+  }
+  return out;
+}
+async function entryText(e){
+  if(!e) return null;
+  if(e.method===0) return new TextDecoder("utf-8").decode(e.comp);
+  if(typeof DecompressionStream==="undefined")
+    throw new Error("미지원 브라우저. Chrome 또는 Edge 최신 버전 필요.");
+  const st=new Blob([e.comp]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return await new Response(st).text();
+}
+
+/* ───────── XLSX 읽기 ───────── */
+async function readWorkbook(file){
+  const zip=await unzip(await file.arrayBuffer());
+  const P=new DOMParser();
+  const doc=async p=>{const t=await entryText(zip[p]);return t?P.parseFromString(t,"application/xml"):null;};
+
+  const shared=[];
+  const ss=await doc("xl/sharedStrings.xml");
+  if(ss) for(const si of ss.getElementsByTagName("si")){
+    let s=""; for(const t of si.getElementsByTagName("t")) s+=t.textContent; shared.push(s);
+  }
+  const wbx=await doc("xl/workbook.xml");
+  if(!wbx) throw new Error("엑셀 파일 아님 또는 파일 손상.");
+  const rels=await doc("xl/_rels/workbook.xml.rels");
+  const relMap={};
+  if(rels) for(const r of rels.getElementsByTagName("Relationship")){
+    let t=r.getAttribute("Target")||"";
+    if(t.startsWith("/xl/")) t=t.slice(4); else t=t.replace(/^\/?xl\//,"").replace(/^\.\//,"");
+    relMap[r.getAttribute("Id")]="xl/"+t;
+  }
+  const sheets={};
+  for(const sh of wbx.getElementsByTagName("sheet")){
+    const nm=sh.getAttribute("name");
+    const rid=sh.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships","id")
+            || sh.getAttribute("r:id");
+    const path=relMap[rid];
+    const sx=path?await doc(path):null;
+    if(!sx){sheets[nm]=[];continue;}
+    const grid=[];
+    for(const row of sx.getElementsByTagName("row")){
+      for(const c of row.getElementsByTagName("c")){
+        const ref=c.getAttribute("r")||""; const m=/^([A-Z]+)(\d+)$/.exec(ref); if(!m) continue;
+        let ci=0; for(const ch of m[1]) ci=ci*26+(ch.charCodeAt(0)-64);
+        const ri=+m[2]-1, t=c.getAttribute("t");
+        let val=null;
+        if(t==="inlineStr"){ const is=c.getElementsByTagName("is")[0];
+          if(is){val="";for(const tt of is.getElementsByTagName("t"))val+=tt.textContent;} }
+        else { const v=c.getElementsByTagName("v")[0];
+          if(v){ const raw=v.textContent;
+            if(t==="s") val=shared[+raw]??"";
+            else if(t==="str"||t==="e") val=raw;
+            else if(t==="b") val=raw==="1";
+            else { const num=Number(raw); val=Number.isFinite(num)?num:raw; } } }
+        if(val===null||val==="") continue;
+        (grid[ri]=grid[ri]||[])[ci-1]=val;
+      }
+    }
+    grid.merges=[...sx.getElementsByTagName("mergeCell")].map(m=>m.getAttribute("ref"));
+    sheets[nm]=grid;
+  }
+  return sheets;
+}
+
+/* ───────── 마스터 해석 ───────── */
+const cell = (g,r,c)=>{const row=g[r];const v=row?row[c]:undefined;return v===undefined?"":v;};
+const txt  = v=>typeof v==="string"?v.trim():(v===""||v===undefined?"":String(v));
+const norm = v=>String(v==null?"":v).replace(/\s+/g,"");
+const digits = v=>String(v==null?"":v).replace(/\D/g,"");
+const fmtBn = d=>d.length===10?`${d.slice(0,3)}-${d.slice(3,5)}-${d.slice(5)}`:d;
+
+/* 기본 품목: 머리글 경로(상위 > 하위)로 열 탐색. 업체매핑 시트가 있으면 그 내용 우선 */
+const DEFAULT_ITEMS=[
+  {item:"전기",parts:[["주간 전기","단상 220V"],["주간 전기","삼상 220V"],["주간 전기","삼상 380V"],
+                      ["24시간 전기","단상 220V"],["24시간 전기","삼상 220V"],["24시간 전기","삼상 380V"]]},
+  {item:"급배수",parts:[["급배수"]]},
+  {item:"압축공기",parts:[["압축공기"]]},
+  {item:"LAN",parts:[["LAN"]]},
+  {item:"부스",parts:[{p:["신청구분","독립"],l:"독립"},{p:["신청구분","조립"],l:"조립"},{p:["신청구분","프리미엄"],l:"프리미엄"}]}
+].map(m=>({...m,vendor:m.item,tag:m.item}));
+
+function parseMapping(sheets){
+  const g=sheets[SHEET_MAP]; if(!g) return null;
+  let hr=-1;
+  for(let r=0;r<g.length&&r<30;r++){
+    const row=g[r]||[]; if(row.some(v=>txt(v)==="품목")){hr=r;break;}
+  }
+  if(hr<0) return null;
+  const head=(g[hr]||[]).map(txt);
+  const ci={item:head.indexOf("품목"),vendor:head.indexOf("발주처"),
+            tag:head.indexOf("파일명 표기"),cols:head.indexOf("대상 열")};
+  if(ci.item<0) return null;
+  const out=[];
+  for(let r=hr+1;r<g.length;r++){
+    const item=txt(cell(g,r,ci.item)); if(!item) break;
+    const raw=ci.cols>=0?txt(cell(g,r,ci.cols)):"";
+    const parts=raw?raw.split(/;|\n/).map(x=>x.split(">").map(y=>y.trim()).filter(Boolean)).filter(p=>p.length)
+                   :[[item]];
+    out.push({item,parts,vendor:ci.vendor>=0?(txt(cell(g,r,ci.vendor))||item):item,
+              tag:ci.tag>=0?(txt(cell(g,r,ci.tag))||item):item});
+  }
+  return out.length?out:null;
+}
+
+/* 3단 머리글: 병합으로 비어 있는 상위 칸은 왼쪽 값으로 채움 */
+function headerLabels(g,hr){
+  const W=Math.max(...[0,1,2].map(k=>(g[hr+k]||[]).length));
+  const lv=[0,1,2].map(k=>{
+    const row=g[hr+k]||[], out=[]; let last="";
+    for(let c=0;c<W;c++){ const v=norm(row[c]); if(v&&k<2) last=v; out[c]=k<2?last:v; }
+    return out; });
+  return Array.from({length:W},(_,c)=>[lv[0][c],lv[1][c],lv[2][c]]);
+}
+const findCol=(labels,path)=>{
+  const p=path.map(norm);
+  for(let c=0;c<labels.length;c++) if(p.every(x=>labels[c].includes(x))) return c;
+  return -1;
+};
+
+function parseMaster(sheets,fileName){
+  const nm=SHEET_MASTERS.find(n=>sheets[n])||Object.keys(sheets).find(n=>n!==SHEET_MAP);
+  const g=sheets[nm]; if(!g) throw new Error("마스터 시트 없음.");
+  let hr=-1;
+  for(let r=0;r<g.length&&r<40;r++){
+    const row=(g[r]||[]).map(norm);
+    if(row.includes("연번")&&row.some(v=>v.startsWith("업체명"))){hr=r;break;}
+  }
+  if(hr<0) throw new Error("머리글 행 없음. '연번'·'업체명' 열 필요.");
+  const labels=headerLabels(g,hr);
+  const ci={
+    no:findCol(labels,["연번"]), key:findCol(labels,["사업자등록번호"]),
+    name:findCol(labels,["업체명(국문)"]), booth:findCol(labels,["최종부스번호"])};
+  if(ci.name<0) ci.name=labels.findIndex(L=>L.some(x=>x.startsWith("업체명")));
+  if(ci.key<0) throw new Error("'사업자등록번호' 열 없음.");
+  if(ci.name<0) throw new Error("'업체명' 열 없음.");
+
+  /* 마스터 A~N열 형식 승계: 머리글(3단, 병합 포함)과 행 값 */
+  const NB=14, colRef=ref=>{const m=/^([A-Z]+)(\d+)$/.exec(ref);let c=0;for(const ch of m[1])c=c*26+ch.charCodeAt(0)-64;return {c:c-1,r:+m[2]-1};};
+  const raw=Array.from({length:3},(_,k)=>Array.from({length:NB},(_,c)=>{const v=cell(g,hr+k,c);return v===""?"":String(v);}));
+  const merges=(g.merges||[]).map(x=>{const [a,b]=x.split(":");if(!b)return null;const p=colRef(a),q=colRef(b);
+    return {r1:p.r-hr,c1:p.c,r2:q.r-hr,c2:q.c};})
+    .filter(m=>m&&m.r1>=0&&m.r2<=2&&m.c2<NB);
+  const head={raw,merges};
+  const spec=parseMapping(sheets)||DEFAULT_ITEMS;
+  const map=[];
+  for(const m of spec){
+    const parts=[];
+    for(const part of m.parts){
+      const path=Array.isArray(part)?part:part.p;
+      const col=findCol(labels,path); if(col<0) continue;
+      parts.push({label:part.l||(m.parts.length>1?path.join(" "):m.item),col});
+    }
+    if(parts.length) map.push({item:m.item,vendor:m.vendor,tag:m.tag,parts});
+  }
+  if(!map.length) throw new Error("품목 열 없음. 머리글의 품목명 확인 필요.");
+
+  const rows=[], missing=[];
+  for(let r=hr+3;r<g.length;r++){
+    const a=ci.no>=0?cell(g,r,ci.no):"";
+    if(typeof a==="string"&&a.trim()!==""&&isNaN(Number(a))) continue;   /* 합계 · 블록 제목 행 */
+    const name=txt(cell(g,r,ci.name)), code=digits(cell(g,r,ci.key));
+    if(!name&&!code) continue;
+    if(!code){ missing.push(name); continue; }
+    const q={};
+    for(const m of map){ q[m.item]={};
+      for(const p of m.parts){ const v=cell(g,r,p.col);
+        const n=typeof v==="number"?v:Number(String(v).replace(/[^\d.-]/g,""));
+        q[m.item][p.label]=Number.isFinite(n)?n:0; } }
+    rows.push({code,bn:fmtBn(code),name:name||"(업체명 없음)",
+      booth:ci.booth>=0?txt(cell(g,r,ci.booth)):"",q,
+      base:Array.from({length:NB},(_,c)=>{const v=cell(g,r,c);return v;})});
+  }
+  if(missing.length) throw new Error(`사업자등록번호 없음: ${missing.slice(0,5).join(", ")}`+
+    `${missing.length>5?` 외 ${missing.length-5}곳`:""} · 대조 키가 없어 생성 중단. 번호 입력 후 다시 업로드 필요.`);
+  if(!rows.length) throw new Error("참가업체 데이터 행 없음.");
+  const by=new Map();
+  rows.forEach(r=>{ (by.get(r.code)||by.set(r.code,[]).get(r.code)).push(r.name); });
+  const dup=[...by].filter(([,n])=>n.length>1).map(([c,n])=>`${fmtBn(c)} (${n.join(", ")})`);
+  if(dup.length) throw new Error(`사업자등록번호 중복: ${dup.join(" / ")} · 대조 키가 겹쳐 생성 중단. 번호 확인 필요.`);
+  return {map,rows,fileName,head};
+}
+
+/* ───────── 대조 ───────── */
+function analyze(curr,prev){
+  const pByCode=prev?new Map(prev.rows.map(r=>[r.code,r])):null;
+  const cByCode=new Map(curr.rows.map(r=>[r.code,r]));
+  const prevItems=prev?new Set(prev.map.map(m=>m.item)):null;
+
+  return curr.map.map(m=>{
+    const it=m.item, labels=m.parts.map(x=>x.label), multi=labels.length>1, out=[];
+    const newItem=prev&&!prevItems.has(it);
+    const vec=o=>labels.map(l=>(o&&o[l])||0);
+    const sum=a=>a.reduce((x,y)=>x+y,0);
+    for(const r of curr.rows){
+      const qv=vec(r.q[it]), q=sum(qv), p=pByCode?pByCode.get(r.code):null;
+      const pv=vec(p?p.q[it]:null), pq=sum(pv);
+      const include=q>0||(prev&&p&&pq>0&&q===0);
+      if(!include) continue;
+      const ch=[], hl={parts:labels.map(()=>false)};
+      if(prev){
+        if(!p){ ch.push("신규 참가업체"); hl.all=true; }
+        else if(newItem){ ch.push("신규 품목"); hl.parts=labels.map(()=>true); }
+        else{
+          const diffs=[];
+          labels.forEach((l,j)=>{ if(pv[j]!==qv[j]){ hl.parts[j]=true;
+            diffs.push(`${multi?l:"수량"} ${pv[j]} → ${qv[j]}`); } });
+          if(diffs.length) ch.push(q===0?`${diffs.join(", ")} (취소)`:diffs.join(", "));
+          if(p.name!==r.name){ ch.push(`업체명 ${p.name} → ${r.name}`); hl.name=true; }
+          if(p.booth!==r.booth){ ch.push(`부스번호 ${p.booth||"-"} → ${r.booth||"-"}`); hl.booth=true; }
+        }
+      }
+      out.push({code:r.code,bn:r.bn,name:r.name,booth:r.booth,base:r.base,qv,qty:q,ch,hl,note:ch.join(" / ")});
+    }
+    if(prev) for(const p of prev.rows){
+      if(cByCode.has(p.code)) continue;
+      const pq=sum(vec(p.q[it])); if(pq<=0) continue;
+      const msg=`마스터 행 삭제 (직전 ${pq}) · 취소 여부 확인`;
+      out.push({code:p.code,bn:p.bn,name:p.name,booth:p.booth,base:p.base,qv:labels.map(()=>0),qty:0,
+                ch:[msg],hl:{all:true,parts:labels.map(()=>true)},note:msg,warn:true});
+    }
+    const changed=out.filter(r=>r.ch.length).length;
+    return {...m,labels,head:curr.head,rows:out,changed,
+            partTotals:labels.map((_,j)=>out.reduce((s,r)=>s+r.qv[j],0)),
+            total:out.reduce((s,r)=>s+r.qty,0),
+            skip:prev?changed===0:out.length===0,
+            warn:out.some(r=>r.warn)};
+  });
+}
+
+/* ───────── XLSX 쓰기 ───────── */
+const CRC=(()=>{const t=new Uint32Array(256);
+  for(let i=0;i<256;i++){let c=i;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[i]=c>>>0;}
+  return u8=>{let c=0xFFFFFFFF;for(let i=0;i<u8.length;i++)c=t[(c^u8[i])&255]^(c>>>8);
+              return (c^0xFFFFFFFF)>>>0;};})();
+const ENC=new TextEncoder();
+function zip(files){ /* [{name, data:Uint8Array}] store 방식 */
+  const locals=[],centrals=[]; let off=0;
+  for(const f of files){
+    const nb=ENC.encode(f.name), crc=CRC(f.data), sz=f.data.length;
+    const lh=new Uint8Array(30+nb.length), d=new DataView(lh.buffer);
+    d.setUint32(0,0x04034b50,true); d.setUint16(4,20,true); d.setUint16(6,0x0800,true);
+    d.setUint16(8,0,true); d.setUint32(14,crc,true); d.setUint32(18,sz,true);
+    d.setUint32(22,sz,true); d.setUint16(26,nb.length,true);
+    lh.set(nb,30); locals.push(lh,f.data);
+    const ch=new Uint8Array(46+nb.length), e=new DataView(ch.buffer);
+    e.setUint32(0,0x02014b50,true); e.setUint16(4,20,true); e.setUint16(6,20,true);
+    e.setUint16(8,0x0800,true); e.setUint16(10,0,true); e.setUint32(16,crc,true);
+    e.setUint32(20,sz,true); e.setUint32(24,sz,true); e.setUint16(28,nb.length,true);
+    e.setUint32(42,off,true); ch.set(nb,46); centrals.push(ch);
+    off+=lh.length+sz;
+  }
+  const cdSize=centrals.reduce((s,c)=>s+c.length,0);
+  const eo=new Uint8Array(22), v=new DataView(eo.buffer);
+  v.setUint32(0,0x06054b50,true); v.setUint16(8,files.length,true);
+  v.setUint16(10,files.length,true); v.setUint32(12,cdSize,true); v.setUint32(16,off,true);
+  const parts=[...locals,...centrals,eo];
+  const total=parts.reduce((s,p)=>s+p.length,0), out=new Uint8Array(total);
+  let o=0; for(const p of parts){out.set(p,o);o+=p.length;}
+  return out;
+}
+
+const FONTS=[
+  '<sz val="10"/><color rgb="FF000000"/>',
+  '<b/><sz val="10"/><color rgb="FFFFFFFF"/>',
+  '<b/><sz val="14"/><color rgb="FF1F3864"/>',
+  '<i/><sz val="9"/><color rgb="FF7F7F7F"/>',
+  '<b/><sz val="10"/><color rgb="FFC00000"/>',
+  '<b/><sz val="10"/><color rgb="FF000000"/>',
+  '<sz val="9"/><color rgb="FFC00000"/>',
+  '<sz val="10"/><color rgb="FF595959"/>'
+].map(f=>`<font>${f}<name val="맑은 고딕"/><family val="2"/><charset val="129"/></font>`).join("");
+const FILLS=['<patternFill patternType="none"/>','<patternFill patternType="gray125"/>',
+  '<patternFill patternType="solid"><fgColor rgb="FF1F3864"/><bgColor indexed="64"/></patternFill>',
+  '<patternFill patternType="solid"><fgColor rgb="FFFFFF00"/><bgColor indexed="64"/></patternFill>',
+  '<patternFill patternType="solid"><fgColor rgb="FFD9E2F3"/><bgColor indexed="64"/></patternFill>']
+  .map(f=>`<fill>${f}</fill>`).join("");
+const BSIDE='<color rgb="FFBFBFBF"/>';
+const BORDERS='<border><left/><right/><top/><bottom/><diagonal/></border>'+
+  `<border><left style="thin">${BSIDE}</left><right style="thin">${BSIDE}</right>`+
+  `<top style="thin">${BSIDE}</top><bottom style="thin">${BSIDE}</bottom><diagonal/></border>`;
+/* 0 기본 1 제목 2 메타 3 범례 4 머리글 5 본문중앙 6 본문좌 7 수량
+   8 변경수량 9 변경중앙 10 변경좌 11 합계라벨 12 합계수량 13 비고 14 합계빈칸 15 꼬리말 */
+const XFS=[
+  [0,0,0,0,null],[0,2,0,0,null],[0,7,0,0,null],[0,6,0,0,null],
+  [0,1,2,1,'<alignment horizontal="center" vertical="center" wrapText="1"/>'],
+  [0,0,0,1,'<alignment horizontal="center"/>'],
+  [0,0,0,1,'<alignment horizontal="left"/>'],
+  [164,0,0,1,'<alignment horizontal="center"/>'],
+  [1,4,3,1,'<alignment horizontal="center"/>'],
+  [0,4,3,1,'<alignment horizontal="center"/>'],
+  [0,4,3,1,'<alignment horizontal="left"/>'],
+  [0,5,4,1,'<alignment horizontal="center"/>'],
+  [1,5,4,1,'<alignment horizontal="center"/>'],
+  [0,6,0,1,'<alignment horizontal="left" wrapText="1"/>'],
+  [0,0,4,1,null],[0,3,0,0,null]
+].map(([nf,f,fi,b,al])=>`<xf numFmtId="${nf}" fontId="${f}" fillId="${fi}" borderId="${b}" xfId="0"`+
+  ` applyFont="1" applyFill="1" applyBorder="1"${al?` applyAlignment="1">${al}</xf>`:"/>"}`).join("");
+const STYLES=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="1"><numFmt numFmtId="164" formatCode="0;;&quot;-&quot;"/></numFmts>
+<fonts count="8">${FONTS}</fonts><fills count="5">${FILLS}</fills>
+<borders count="2">${BORDERS}</borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="16">${XFS}</cellXfs>
+<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+
+function sCell(ref,s,v){ return `<c r="${ref}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${xesc(v)}</t></is></c>`; }
+function nCell(ref,s,v){ return `<c r="${ref}" s="${s}"><v>${v}</v></c>`; }
+function fCell(ref,s,f,v){ return `<c r="${ref}" s="${s}"><f>${xesc(f)}</f><v>${v}</v></c>`; }
+
+const NB=14, BASE_W=[6,14,9,22,12,16,11,10,14,8,13,13,24,24];
+const RANGE=(c1,r1,c2,r2)=>`${colName(c1+1)}${r1}:${colName(c2+1)}${r2}`;
+function buildSheet(v,meta){
+  const nP=v.labels.length, cKey=NB, cP0=NB+1, cNote=NB+1+nP, lastC=cNote+1, last_=colName(lastC);
+  const HR=5, first=HR+3, H=v.head;
+  const R=[];
+  R.push(`<row r="1" ht="20" customHeight="1">${sCell("A1",1,(v.vendor===v.item?`${v.item} 발주 내역`:`${v.vendor} (${v.item}) 발주 내역`))}</row>`);
+  R.push(`<row r="2">${sCell("A2",2,`마스터: ${meta.master}`+
+    (meta.prevName?` · 직전: ${meta.prevName}`:"")+` · 사업자등록번호 기준 대조`)}</row>`);
+  R.push(`<row r="3">${sCell("A3",meta.prev?3:2,meta.prev
+    ?"※ 빨간 글씨 + 노란 바탕 = 직전 발송본 대비 변경 항목. 취소 건은 수량 0 표기."
+    :"※ 1차 발송본. 비교 대상 없음, 변경 표시 없음.")}</row>`);
+
+  /* 3단 머리글: 마스터 A~N 그대로, 뒤쪽 열은 3행 병합 */
+  const hc=[{},{},{}], merges=[];
+  const put=(k,c,t)=>{hc[k][c]=t===""?`<c r="${colName(c+1)}${HR+k}" s="4"/>`:sCell(colName(c+1)+(HR+k),4,t);};
+  for(let k=0;k<3;k++) for(let c=0;c<NB;c++) put(k,c,H.raw[k][c]);
+  H.merges.forEach(m=>merges.push(RANGE(m.c1,HR+m.r1,m.c2,HR+m.r2)));
+  const tail=[[cKey,"사업자등록번호"],...v.labels.map((l,j)=>[cP0+j,l]),[cNote,"비고"]];
+  tail.forEach(([c,t])=>{ put(0,c,t); put(1,c,""); put(2,c,""); merges.push(RANGE(c,HR,c,HR+2)); });
+  for(let k=0;k<3;k++)
+    R.push(`<row r="${HR+k}" ht="${nP>1?22:18}" customHeight="1">${Object.keys(hc[k]).map(Number).sort((x,y)=>x-y).map(c=>hc[k][c]).join("")}</row>`);
+
+  v.rows.forEach((r,i)=>{
+    const rn=first+i, hl=r.hl||{}, all=!!hl.all, cells=[];
+    for(let c=0;c<NB;c++){
+      const ref=colName(c+1)+rn, val=r.base&&r.base[c]!==undefined?r.base[c]:"";
+      if(c===0){ cells.push(nCell(ref,all?9:5,i+1)); continue; }
+      if(c===3){ cells.push(sCell(ref,all||hl.name?10:6,r.name)); continue; }
+      if(c===6){ cells.push(sCell(ref,all||hl.booth?9:5,r.booth)); continue; }
+      if(val===""||val==null) cells.push(`<c r="${ref}" s="${all?10:6}"/>`);
+      else if(typeof val==="number") cells.push(nCell(ref,all?9:5,val));
+      else cells.push(sCell(ref,all?10:6,String(val)));
+    }
+    cells.push(sCell(colName(cKey+1)+rn,all?9:5,r.bn));
+    r.qv.forEach((q,j)=>cells.push(nCell(colName(cP0+j+1)+rn,all||(hl.parts&&hl.parts[j])?8:7,q)));
+    cells.push(sCell(colName(cNote+1)+rn,13,r.note||""));
+    R.push(`<row r="${rn}">${cells.join("")}</row>`);
+  });
+  const last=first+v.rows.length-1, tr=last+1;
+  const tcells=[];
+  for(let c=0;c<=cNote;c++){
+    const ref=colName(c+1)+tr;
+    if(c===3) tcells.push(sCell(ref,11,"합계"));
+    else if(c>=cP0&&c<cNote){ const L=colName(c+1);
+      tcells.push(fCell(ref,12,`SUM(${L}${first}:${L}${last})`,v.partTotals[c-cP0])); }
+    else tcells.push(`<c r="${ref}" s="14"/>`);
+  }
+  R.push(`<row r="${tr}">${tcells.join("")}</row>`);
+  R.push(`<row r="${tr+2}">${sCell("A"+(tr+2),15,
+    `변경 ${v.changed}건 · 총 ${v.rows.length}행 · 합계 ${v.total}`)}</row>`);
+
+  const W=[...BASE_W,17,...v.labels.map(()=>nP>1?12:10),34];
+  const cols=W.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<dimension ref="A1:${last_.replace(/\d+$/,"")}${tr+2}"/>
+<sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="${HR+2}" topLeftCell="A${first}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetFormatPr defaultRowHeight="15"/><cols>${cols}</cols>
+<sheetData>${R.join("")}</sheetData>
+<mergeCells count="${merges.length}">${merges.map(m=>`<mergeCell ref="${m}"/>`).join("")}</mergeCells>
+<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>
+</worksheet>`;
+}
+
+function buildXlsx(v,meta){
+  const f=(name,str)=>({name,data:ENC.encode(str)});
+  return zip([
+    f("[Content_Types].xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`),
+    f("_rels/.rels",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`),
+    f("xl/workbook.xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="발주내역" sheetId="1" r:id="rId1"/></sheets>
+<calcPr calcId="0" fullCalcOnLoad="1"/></workbook>`),
+    f("xl/_rels/workbook.xml.rels",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`),
+    f("xl/styles.xml",STYLES),
+    f("xl/worksheets/sheet1.xml",buildSheet(v,meta))
+  ]);
+}
+
+/* ───────── 저장 ───────── */
+let saver=null;
+(async()=>{ try{ saver=await window.claude?.use?.("downloads")||null; }catch(e){} })();
+async function save(filename,bytes){
+  const blob=new Blob([bytes],{type:filename.endsWith(".zip")
+    ?"application/zip":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  if(saver){ await saver.save({filename,data:blob}); return; }
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+}
+
+/* ───────── 상태 ───────── */
+let state={curr:null,prev:null,result:null};
+let pvPick=0;
+
+const baseOf=n=>String(n||"").replace(/\.(xlsx|xlsm|xls)$/i,"").trim()||"발주";
+function meta(){
+  const master=state.curr?state.curr.fileName:"";
+  return {base:baseOf(master), prev:!!state.prev, master:master||"(없음)",
+          prevName:state.prev?state.prev.fileName:""};
+}
+const fileNameFor=(tag,m)=>`${m.base}_${tag}.xlsx`;
+const saveMsg=e=>e&&e.code==="declined"?"저장 취소됨."
+  :`저장 실패. ${e&&e.message?e.message:""}`;
+function showErr(msg){ const el=$("#err"); el.textContent=msg||""; el.hidden=!msg; }
+const waiting=t=>`<div class="waiting">${t}</div>`;
+
+/* ───────── 빈 화면 ───────── */
+function renderEmpty(){
+  $("#fnbox").hidden=true; $("#banner").hidden=true;
+  $("#results").innerHTML=waiting("현재 마스터 파일을 올리면 발주처별 결과가 나옵니다.");
+  $("#pvtabs").innerHTML="";
+  $("#preview").innerHTML=waiting("현재 마스터 파일을 올리면 파일 내용이 나옵니다.");
+  $("#saveBox").innerHTML=waiting("생성된 파일이 없습니다.");
+  $("#foot").textContent="대조 기준 사업자등록번호 · 브라우저 내 처리";
+}
+
+/* ───────── 결과 ───────── */
+function render(){
+  const res=state.result, m=meta(), gen=res.filter(v=>!v.skip);
+  const totalCh=res.reduce((s,v)=>s+v.changed,0), warn=res.some(v=>v.warn);
+
+  $("#fnbox").hidden=false;
+  $("#fnPreview").innerHTML=`${hesc(m.base)}_<i>${hesc(gen[0]?gen[0].tag:"발주처")}</i>.xlsx`;
+  $("#foot").textContent=`마스터 ${m.master}`+(m.prevName?` · 직전 ${m.prevName}`:" · 직전 발송본 없음")
+    +" · 대조 기준 사업자등록번호";
+
+  $("#banner").hidden=false;
+  $("#banner").innerHTML=
+    `<span>발주처 파일 <span class="big">${gen.length}</span> / ${res.length} 생성</span>`+
+    `<span>건너뜀 <span class="big">${res.length-gen.length}</span></span>`+
+    `<span>변경 <span class="big">${totalCh}</span>건</span>`+
+    (state.prev?`<span style="color:var(--ink-3)">직전: ${hesc(state.prev.fileName)}</span>`
+              :`<span style="color:var(--ink-3)">1차 발송 · 비교 대상 없음</span>`)+
+    (warn?`<span class="chip mark">행 삭제 감지</span>`:"");
+
+  const rows=res.map((v,i)=>{
+    const chip=v.skip?`<span class="chip skip">건너뜀</span>`
+      :(v.warn?`<span class="chip mark">확인 필요</span>`:`<span class="chip gen">생성</span>`);
+    const det=v.rows.filter(r=>r.ch.length);
+    return `<tr class="${v.skip?"skipped":""}">
+      <td class="vendor">${hesc(v.vendor)}</td>
+      <td class="item">${hesc(v.item)}</td>
+      <td class="n">${v.rows.length}</td>
+      <td class="n">${v.total}</td>
+      <td class="n">${v.changed||"-"}</td>
+      <td>${chip}</td></tr>`+
+    (det.length?`<tr><td colspan="6" style="padding:0">
+      <details class="det"><summary>${hesc(v.vendor)} 변경 ${det.length}건
+        <button class="cbtn" data-i="${i}" type="button">복사</button></summary>
+      <ul class="chlist">${det.map(r=>
+        `<li><code>${hesc(r.bn)}</code><span>${hesc(r.name)}</span>
+         <span class="what">${hesc(r.note)}</span></li>`).join("")}</ul>
+      </details></td></tr>`:"");
+  }).join("");
+
+  $("#results").innerHTML=`<div class="tscroll"><table>
+    <thead><tr><th>발주처</th><th>품목</th><th class="n">행</th><th class="n">수량</th>
+    <th class="n">변경</th><th>상태</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+
+  $("#results").querySelectorAll(".cbtn").forEach(b=>b.addEventListener("click",async ev=>{
+    ev.preventDefault(); ev.stopPropagation();
+    const v=res[+b.dataset.i], txt=changeText(v,m), was=b.textContent;
+    try{ await navigator.clipboard.writeText(txt); b.textContent="복사됨"; }
+    catch(e){ b.textContent="복사 실패"; }
+    setTimeout(()=>{b.textContent=was;},1800);
+  }));
+
+  renderPreview(gen);
+  renderSave(gen,m);
+}
+
+function changeText(v,m){
+  const det=v.rows.filter(r=>r.ch.length);
+  return [`[${v.vendor} / ${v.item}] ${fileNameFor(v.tag,m)}`,`변경 ${det.length}건`,
+    ...det.map(r=>`· ${r.name} (${r.bn}) ${r.note}`)
+  ].join("\n");
+}
+
+/* ───────── 미리보기 ───────── */
+function renderPreview(gen){
+  const tabs=$("#pvtabs"), box=$("#preview");
+  if(!gen.length){ tabs.innerHTML="";
+    box.innerHTML=waiting("변경된 발주처가 없어 생성할 파일이 없습니다."); return; }
+  if(pvPick>=gen.length) pvPick=0;
+  tabs.innerHTML=gen.map((v,i)=>
+    `<button class="pvtab" role="tab" aria-selected="${i===pvPick}" data-i="${i}">`+
+    `${hesc(v.tag)}${v.changed?` <span style="opacity:.75">${v.changed}</span>`:""}</button>`).join("");
+  tabs.querySelectorAll(".pvtab").forEach(b=>b.addEventListener("click",()=>{
+    pvPick=+b.dataset.i; renderPreview(gen);
+  }));
+  box.innerHTML=sheetPreview(gen[pvPick],meta());
+}
+function headHtml(v){
+  const H=v.head, covered=new Set(), tl=new Map();
+  H.merges.forEach(mg=>{ for(let r=mg.r1;r<=mg.r2;r++) for(let c=mg.c1;c<=mg.c2;c++)
+    if(r!==mg.r1||c!==mg.c1) covered.add(r+","+c); tl.set(mg.r1+","+mg.c1,mg); });
+  const tail=["사업자등록번호",...v.labels,"비고"];
+  return [0,1,2].map(r=>{
+    let h="";
+    for(let c=0;c<14;c++){ if(covered.has(r+","+c)) continue;
+      const mg=tl.get(r+","+c), rs=mg?mg.r2-mg.r1+1:1, cs=mg?mg.c2-mg.c1+1:1;
+      h+=`<th${rs>1?` rowspan="${rs}"`:""}${cs>1?` colspan="${cs}"`:""}>${hesc(H.raw[r][c]).replace(/\n/g,"<br>")}</th>`; }
+    if(r===0) h+=tail.map(t=>`<th rowspan="3">${hesc(t)}</th>`).join("");
+    return `<tr>${h}</tr>`; }).join("");
+}
+function sheetPreview(v,m){
+  const hl=r=>r.hl||{};
+  const on=(r,f)=>hl(r).all||hl(r)[f];
+  const body=v.rows.map((r,i)=>{
+    const base=r.base||[];
+    const bc=Array.from({length:14},(_,c)=>{
+      if(c===0) return `<td class="num${hl(r).all?" chg":""}">${i+1}</td>`;
+      if(c===3) return `<td class="${on(r,"name")?"chg":""}">${hesc(r.name)}</td>`;
+      if(c===6) return `<td class="num${on(r,"booth")?" chg":""}">${hesc(r.booth)}</td>`;
+      const val=base[c]; return `<td class="${hl(r).all?"chg":""}">${hesc(val===""||val==null?"":val)}</td>`; }).join("");
+    const q=r.qv.map((x,j)=>{const o=hl(r).all||(hl(r).parts&&hl(r).parts[j]);
+      return `<td class="num${o?" chg":""}">${o||x!==0?x:"-"}</td>`;}).join("");
+    return `<tr>${bc}<td class="${hl(r).all?"chg":""}">${hesc(r.bn)}</td>${q}<td class="rmk">${hesc(r.note||"")}</td></tr>`;
+  }).join("");
+  const nTail=v.labels.length;
+  return `<div class="tscroll"><div class="pvwrap">
+    <div class="t1">${v.vendor===v.item?hesc(v.item):`${hesc(v.vendor)} (${hesc(v.item)})`} 발주 내역</div>
+    <div class="t2">마스터: ${hesc(m.master)}${m.prevName?` · 직전: ${hesc(m.prevName)}`:""} · 사업자등록번호 기준 대조</div>
+    <div class="t3">${m.prev
+      ?"※ 빨간 글씨 + 노란 바탕 = 직전 발송본 대비 변경 항목. 취소 건은 수량 0 표기."
+      :"※ 1차 발송본. 비교 대상 없음, 변경 표시 없음."}</div>
+    <table class="xl"><thead>${headHtml(v)}</thead>
+    <tbody>${body}
+      <tr class="tot">${"<td></td>".repeat(3)}<td class="num">합계</td>${"<td></td>".repeat(10)}<td></td>
+      ${v.partTotals.map(t=>`<td class="num">${t}</td>`).join("")}<td></td></tr></tbody></table>
+    <div class="pvfoot">변경 ${v.changed}건 · 총 ${v.rows.length}행 · 합계 ${v.total}
+      &nbsp;·&nbsp; ${hesc(fileNameFor(v.tag,m))}</div>
+  </div></div>`;
+}
+
+/* ───────── 저장 ───────── */
+function renderSave(gen,m){
+  const box=$("#saveBox");
+  if(!gen.length){ box.innerHTML=waiting("생성할 파일이 없습니다."); return; }
+  box.innerHTML=`<div class="btn-row">
+      <button class="btn pri" id="dlAll">전체 저장 (ZIP)</button>
+      <span class="savenote">${gen.length}개 · ${hesc(gen.map(v=>v.tag).join(", "))}</span>
+    </div>
+    <div class="savelist"><span class="lbl2">개별 저장</span>
+      ${gen.map((v,i)=>`<button class="btn sm dl1" data-i="${i}">${hesc(v.tag)}</button>`).join("")}
+    </div>`;
+
+  box.querySelectorAll(".dl1").forEach(b=>b.addEventListener("click",async()=>{
+    const v=gen[+b.dataset.i], was=b.textContent;
+    b.disabled=true; b.textContent="저장 중";
+    try{ await save(fileNameFor(v.tag,m),buildXlsx(v,m)); b.textContent="저장됨";
+         setTimeout(()=>{b.textContent=was;b.disabled=false;},2000); }
+    catch(e){ b.textContent=was; b.disabled=false; showErr(saveMsg(e)); }
+  }));
+  box.querySelector("#dlAll").addEventListener("click",async()=>{
+    const b=box.querySelector("#dlAll"), was=b.textContent;
+    b.disabled=true; b.textContent="생성 중";
+    try{
+      const files=gen.map(v=>({name:fileNameFor(v.tag,m),data:buildXlsx(v,m)}));
+      await save(`${m.base}_업체별.zip`,zip(files)); b.textContent="저장됨";
+      setTimeout(()=>{b.textContent=was;b.disabled=false;},2500);
+    }catch(e){ b.textContent=was; b.disabled=false; showErr(saveMsg(e)); }
+  });
+}
+
+/* ───────── 이벤트 ───────── */
+async function pick(which,input,nameEl,dropEl,clearEl){
+  const file=input.files&&input.files[0]; if(!file) return;
+  showErr("");
+  nameEl.textContent="읽는 중"; nameEl.classList.remove("empty");
+  try{
+    const sheets=await readWorkbook(file);
+    const book=parseMaster(sheets,file.name);
+    state[which]=book; pvPick=0;
+    nameEl.textContent=`${file.name} · ${book.rows.length}개사 · 품목 ${book.map.length}`;
+    dropEl.classList.add("on"); clearEl.hidden=false;
+    run();
+  }catch(e){
+    state[which]=null; input.value="";
+    nameEl.textContent="미선택"; nameEl.classList.add("empty");
+    dropEl.classList.remove("on"); clearEl.hidden=true;
+    showErr(e.message||String(e));
+    run();
+  }
+}
+function clearPick(which,input,nameEl,dropEl,clearEl){
+  state[which]=null; input.value=""; pvPick=0;
+  nameEl.textContent="미선택"; nameEl.classList.add("empty");
+  dropEl.classList.remove("on"); clearEl.hidden=true;
+  showErr(""); run();
+}
+function run(){
+  if(!state.curr){ state.result=null; renderEmpty(); return; }
+  try{ state.result=analyze(state.curr,state.prev); render(); }
+  catch(e){ state.result=null; renderEmpty(); showErr(e.message||String(e)); }
+}
+
+$("#fileCurr").addEventListener("change",()=>
+  pick("curr",$("#fileCurr"),$("#nameCurr"),$("#dropCurr"),$("#clearCurr")));
+$("#filePrev").addEventListener("change",()=>
+  pick("prev",$("#filePrev"),$("#namePrev"),$("#dropPrev"),$("#clearPrev")));
+$("#clearCurr").addEventListener("click",()=>
+  clearPick("curr",$("#fileCurr"),$("#nameCurr"),$("#dropCurr"),$("#clearCurr")));
+$("#clearPrev").addEventListener("click",()=>
+  clearPick("prev",$("#filePrev"),$("#namePrev"),$("#dropPrev"),$("#clearPrev")));
+
+renderEmpty();
+</script>
