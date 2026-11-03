@@ -272,7 +272,7 @@
     <dl>
       <dt>파일명</dt><dd>마스터 파일명 + <b>_발주처</b>. 마스터가 <code>2027 서울커피엑스포 마스터 파일.xlsx</code>면 <code>2027 서울커피엑스포 마스터 파일_전기.xlsx</code>.</dd>
       <dt>대조 키</dt><dd>사업자등록번호. 번호 일치 행끼리 비교. 번호 누락 또는 중복 시 생성 중단 후 해당 업체 표시.</dd>
-      <dt>공통 열</dt><dd>사업자등록번호 · 업체명 · 최종 부스번호. 전 발주처 파일 공통 포함.</dd>
+      <dt>공통 열</dt><dd>마스터 파일 A~N열 형식 그대로(연번 · 업체 특이사항 · KCA 회원사 · 업체명 · 배치 · 최종 부스번호 · 담당자 정보) + 사업자등록번호. 전 발주처 파일 공통 포함.</dd>
       <dt>분리 기준</dt><dd>마스터 파일의 품목 열. 전기 · 급배수 · 압축공기 · LAN · 조립부스 · 프리미엄부스, 품목 1개 = 파일 1개. 전기는 주간 · 24시간 × 단상 · 삼상 6열 포함. 품목 변경 시 <b>업체매핑</b> 시트로 지정.</dd>
       <dt>포함 행</dt><dd>해당 품목 수량 1 이상. 직전 1 이상 → 현재 0인 취소 건 포함.</dd>
       <dt>변경 표시</dt><dd>빨간 글씨 + 노란 바탕. 수량 · 부스번호 변경, 신규 참가업체 대상.</dd>
@@ -372,6 +372,7 @@ async function readWorkbook(file){
         (grid[ri]=grid[ri]||[])[ci-1]=val;
       }
     }
+    grid.merges=[...sx.getElementsByTagName("mergeCell")].map(m=>m.getAttribute("ref"));
     sheets[nm]=grid;
   }
   return sheets;
@@ -450,6 +451,13 @@ function parseMaster(sheets,fileName){
   if(ci.key<0) throw new Error("'사업자등록번호' 열 없음.");
   if(ci.name<0) throw new Error("'업체명' 열 없음.");
 
+  /* 마스터 A~N열 형식 승계: 머리글(3단, 병합 포함)과 행 값 */
+  const NB=14, colRef=ref=>{const m=/^([A-Z]+)(\d+)$/.exec(ref);let c=0;for(const ch of m[1])c=c*26+ch.charCodeAt(0)-64;return {c:c-1,r:+m[2]-1};};
+  const raw=Array.from({length:3},(_,k)=>Array.from({length:NB},(_,c)=>{const v=cell(g,hr+k,c);return v===""?"":String(v);}));
+  const merges=(g.merges||[]).map(x=>{const [a,b]=x.split(":");if(!b)return null;const p=colRef(a),q=colRef(b);
+    return {r1:p.r-hr,c1:p.c,r2:q.r-hr,c2:q.c};})
+    .filter(m=>m&&m.r1>=0&&m.r2<=2&&m.c2<NB);
+  const head={raw,merges};
   const spec=parseMapping(sheets)||DEFAULT_ITEMS;
   const map=[];
   for(const m of spec){
@@ -475,7 +483,8 @@ function parseMaster(sheets,fileName){
         const n=typeof v==="number"?v:Number(String(v).replace(/[^\d.-]/g,""));
         q[m.item][p.label]=Number.isFinite(n)?n:0; } }
     rows.push({code,bn:fmtBn(code),name:name||"(업체명 없음)",
-      booth:ci.booth>=0?txt(cell(g,r,ci.booth)):"",q});
+      booth:ci.booth>=0?txt(cell(g,r,ci.booth)):"",q,
+      base:Array.from({length:NB},(_,c)=>{const v=cell(g,r,c);return v;})});
   }
   if(missing.length) throw new Error(`사업자등록번호 없음: ${missing.slice(0,5).join(", ")}`+
     `${missing.length>5?` 외 ${missing.length-5}곳`:""} · 대조 키가 없어 생성 중단. 번호 입력 후 다시 업로드 필요.`);
@@ -484,7 +493,7 @@ function parseMaster(sheets,fileName){
   rows.forEach(r=>{ (by.get(r.code)||by.set(r.code,[]).get(r.code)).push(r.name); });
   const dup=[...by].filter(([,n])=>n.length>1).map(([c,n])=>`${fmtBn(c)} (${n.join(", ")})`);
   if(dup.length) throw new Error(`사업자등록번호 중복: ${dup.join(" / ")} · 대조 키가 겹쳐 생성 중단. 번호 확인 필요.`);
-  return {map,rows,fileName};
+  return {map,rows,fileName,head};
 }
 
 /* ───────── 대조 ───────── */
@@ -516,17 +525,17 @@ function analyze(curr,prev){
           if(p.booth!==r.booth){ ch.push(`부스번호 ${p.booth||"-"} → ${r.booth||"-"}`); hl.booth=true; }
         }
       }
-      out.push({code:r.code,bn:r.bn,name:r.name,booth:r.booth,qv,qty:q,ch,hl,note:ch.join(" / ")});
+      out.push({code:r.code,bn:r.bn,name:r.name,booth:r.booth,base:r.base,qv,qty:q,ch,hl,note:ch.join(" / ")});
     }
     if(prev) for(const p of prev.rows){
       if(cByCode.has(p.code)) continue;
       const pq=sum(vec(p.q[it])); if(pq<=0) continue;
       const msg=`마스터 행 삭제 (직전 ${pq}) · 취소 여부 확인`;
-      out.push({code:p.code,bn:p.bn,name:p.name,booth:p.booth,qv:labels.map(()=>0),qty:0,
+      out.push({code:p.code,bn:p.bn,name:p.name,booth:p.booth,base:p.base,qv:labels.map(()=>0),qty:0,
                 ch:[msg],hl:{all:true,parts:labels.map(()=>true)},note:msg,warn:true});
     }
     const changed=out.filter(r=>r.ch.length).length;
-    return {...m,labels,rows:out,changed,
+    return {...m,labels,head:curr.head,rows:out,changed,
             partTotals:labels.map((_,j)=>out.reduce((s,r)=>s+r.qv[j],0)),
             total:out.reduce((s,r)=>s+r.qty,0),
             skip:prev?changed===0:out.length===0,
@@ -616,10 +625,11 @@ function sCell(ref,s,v){ return `<c r="${ref}" s="${s}" t="inlineStr"><is><t xml
 function nCell(ref,s,v){ return `<c r="${ref}" s="${s}"><v>${v}</v></c>`; }
 function fCell(ref,s,f,v){ return `<c r="${ref}" s="${s}"><f>${xesc(f)}</f><v>${v}</v></c>`; }
 
+const NB=14, BASE_W=[6,14,9,22,12,16,11,10,14,8,13,13,24,24];
+const RANGE=(c1,r1,c2,r2)=>`${colName(c1+1)}${r1}:${colName(c2+1)}${r2}`;
 function buildSheet(v,meta){
-  const nP=v.labels.length, lastC=5+nP, last_=colName(lastC);
-  const HDR=["연번","사업자등록번호","업체명","부스번호",...v.labels,"비고"];
-  const W=[6,17,24,12,...v.labels.map(()=>nP>1?12:10),34];
+  const nP=v.labels.length, cKey=NB, cP0=NB+1, cNote=NB+1+nP, lastC=cNote+1, last_=colName(lastC);
+  const HR=5, first=HR+3, H=v.head;
   const R=[];
   R.push(`<row r="1" ht="20" customHeight="1">${sCell("A1",1,(v.vendor===v.item?`${v.item} 발주 내역`:`${v.vendor} (${v.item}) 발주 내역`))}</row>`);
   R.push(`<row r="2">${sCell("A2",2,`마스터: ${meta.master}`+
@@ -627,39 +637,55 @@ function buildSheet(v,meta){
   R.push(`<row r="3">${sCell("A3",meta.prev?3:2,meta.prev
     ?"※ 빨간 글씨 + 노란 바탕 = 직전 발송본 대비 변경 항목. 취소 건은 수량 0 표기."
     :"※ 1차 발송본. 비교 대상 없음, 변경 표시 없음.")}</row>`);
-  R.push(`<row r="5" ht="${nP>1?40:26}" customHeight="1">${
-    HDR.map((h,i)=>sCell(colName(i+1)+"5",4,h)).join("")}</row>`);
-  const first=6;
+
+  /* 3단 머리글: 마스터 A~N 그대로, 뒤쪽 열은 3행 병합 */
+  const hc=[{},{},{}], merges=[];
+  const put=(k,c,t)=>{hc[k][c]=t===""?`<c r="${colName(c+1)}${HR+k}" s="4"/>`:sCell(colName(c+1)+(HR+k),4,t);};
+  for(let k=0;k<3;k++) for(let c=0;c<NB;c++) put(k,c,H.raw[k][c]);
+  H.merges.forEach(m=>merges.push(RANGE(m.c1,HR+m.r1,m.c2,HR+m.r2)));
+  const tail=[[cKey,"사업자등록번호"],...v.labels.map((l,j)=>[cP0+j,l]),[cNote,"비고"]];
+  tail.forEach(([c,t])=>{ put(0,c,t); put(1,c,""); put(2,c,""); merges.push(RANGE(c,HR,c,HR+2)); });
+  for(let k=0;k<3;k++)
+    R.push(`<row r="${HR+k}" ht="${nP>1?22:18}" customHeight="1">${Object.keys(hc[k]).map(Number).sort((x,y)=>x-y).map(c=>hc[k][c]).join("")}</row>`);
+
   v.rows.forEach((r,i)=>{
-    const rn=first+i, hl=r.hl||{}, all=!!hl.all;
-    const cs=(f)=>all||hl[f]?9:5;
-    const cells=[
-      nCell("A"+rn,5,i+1),
-      sCell("B"+rn,all?9:5,r.bn),
-      all||hl.name?sCell("C"+rn,10,r.name):sCell("C"+rn,6,r.name),
-      sCell("D"+rn,cs("booth"),r.booth),
-      ...r.qv.map((q,j)=>nCell(colName(5+j)+rn,all||(hl.parts&&hl.parts[j])?8:7,q)),
-      sCell(colName(lastC)+rn,13,r.note||"")
-    ];
+    const rn=first+i, hl=r.hl||{}, all=!!hl.all, cells=[];
+    for(let c=0;c<NB;c++){
+      const ref=colName(c+1)+rn, val=r.base&&r.base[c]!==undefined?r.base[c]:"";
+      if(c===0){ cells.push(nCell(ref,all?9:5,i+1)); continue; }
+      if(c===3){ cells.push(sCell(ref,all||hl.name?10:6,r.name)); continue; }
+      if(c===6){ cells.push(sCell(ref,all||hl.booth?9:5,r.booth)); continue; }
+      if(val===""||val==null) cells.push(`<c r="${ref}" s="${all?10:6}"/>`);
+      else if(typeof val==="number") cells.push(nCell(ref,all?9:5,val));
+      else cells.push(sCell(ref,all?10:6,String(val)));
+    }
+    cells.push(sCell(colName(cKey+1)+rn,all?9:5,r.bn));
+    r.qv.forEach((q,j)=>cells.push(nCell(colName(cP0+j+1)+rn,all||(hl.parts&&hl.parts[j])?8:7,q)));
+    cells.push(sCell(colName(cNote+1)+rn,13,r.note||""));
     R.push(`<row r="${rn}">${cells.join("")}</row>`);
   });
   const last=first+v.rows.length-1, tr=last+1;
-  R.push(`<row r="${tr}">`+
-    `<c r="A${tr}" s="14"/>`+`<c r="B${tr}" s="14"/>`+
-    sCell("C"+tr,11,"합계")+`<c r="D${tr}" s="14"/>`+
-    v.partTotals.map((t,j)=>{const L=colName(5+j);
-      return fCell(L+tr,12,`SUM(${L}${first}:${L}${last})`,t);}).join("")+
-    `<c r="${last_}${tr}" s="14"/></row>`);
+  const tcells=[];
+  for(let c=0;c<=cNote;c++){
+    const ref=colName(c+1)+tr;
+    if(c===3) tcells.push(sCell(ref,11,"합계"));
+    else if(c>=cP0&&c<cNote){ const L=colName(c+1);
+      tcells.push(fCell(ref,12,`SUM(${L}${first}:${L}${last})`,v.partTotals[c-cP0])); }
+    else tcells.push(`<c r="${ref}" s="14"/>`);
+  }
+  R.push(`<row r="${tr}">${tcells.join("")}</row>`);
   R.push(`<row r="${tr+2}">${sCell("A"+(tr+2),15,
     `변경 ${v.changed}건 · 총 ${v.rows.length}행 · 합계 ${v.total}`)}</row>`);
 
+  const W=[...BASE_W,17,...v.labels.map(()=>nP>1?12:10),34];
   const cols=W.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join("");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<dimension ref="A1:${last_}${tr+2}"/>
-<sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="5" topLeftCell="A6" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<dimension ref="A1:${last_.replace(/\d+$/,"")}${tr+2}"/>
+<sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="${HR+2}" topLeftCell="A${first}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
 <sheetFormatPr defaultRowHeight="15"/><cols>${cols}</cols>
 <sheetData>${R.join("")}</sheetData>
+<mergeCells count="${merges.length}">${merges.map(m=>`<mergeCell ref="${m}"/>`).join("")}</mergeCells>
 <pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>
 </worksheet>`;
 }
@@ -809,29 +835,43 @@ function renderPreview(gen){
   }));
   box.innerHTML=sheetPreview(gen[pvPick],meta());
 }
+function headHtml(v){
+  const H=v.head, covered=new Set(), tl=new Map();
+  H.merges.forEach(mg=>{ for(let r=mg.r1;r<=mg.r2;r++) for(let c=mg.c1;c<=mg.c2;c++)
+    if(r!==mg.r1||c!==mg.c1) covered.add(r+","+c); tl.set(mg.r1+","+mg.c1,mg); });
+  const tail=["사업자등록번호",...v.labels,"비고"];
+  return [0,1,2].map(r=>{
+    let h="";
+    for(let c=0;c<14;c++){ if(covered.has(r+","+c)) continue;
+      const mg=tl.get(r+","+c), rs=mg?mg.r2-mg.r1+1:1, cs=mg?mg.c2-mg.c1+1:1;
+      h+=`<th${rs>1?` rowspan="${rs}"`:""}${cs>1?` colspan="${cs}"`:""}>${hesc(H.raw[r][c]).replace(/\n/g,"<br>")}</th>`; }
+    if(r===0) h+=tail.map(t=>`<th rowspan="3">${hesc(t)}</th>`).join("");
+    return `<tr>${h}</tr>`; }).join("");
+}
 function sheetPreview(v,m){
   const hl=r=>r.hl||{};
-  const td=(r,f,val,cls)=>{const on=hl(r).all||hl(r)[f];
-    return `<td class="${cls||""}${on?" chg":""}">${hesc(val===""||val==null?"":val)}</td>`;};
-  const tdq=(r,j)=>{const on=hl(r).all||(hl(r).parts&&hl(r).parts[j]);
-    return `<td class="num${on?" chg":""}">${on||r.qv[j]!==0?r.qv[j]:"-"}</td>`;};
-  const body=v.rows.map((r,i)=>`<tr>
-      <td class="num">${i+1}</td>
-      ${td(r,"all",r.bn,"")}${td(r,"name",r.name,"")}
-      ${td(r,"booth",r.booth,"num")}
-      ${r.qv.map((_,j)=>tdq(r,j)).join("")}
-      <td class="rmk">${hesc(r.note||"")}</td></tr>`).join("");
+  const on=(r,f)=>hl(r).all||hl(r)[f];
+  const body=v.rows.map((r,i)=>{
+    const base=r.base||[];
+    const bc=Array.from({length:14},(_,c)=>{
+      if(c===0) return `<td class="num${hl(r).all?" chg":""}">${i+1}</td>`;
+      if(c===3) return `<td class="${on(r,"name")?"chg":""}">${hesc(r.name)}</td>`;
+      if(c===6) return `<td class="num${on(r,"booth")?" chg":""}">${hesc(r.booth)}</td>`;
+      const val=base[c]; return `<td class="${hl(r).all?"chg":""}">${hesc(val===""||val==null?"":val)}</td>`; }).join("");
+    const q=r.qv.map((x,j)=>{const o=hl(r).all||(hl(r).parts&&hl(r).parts[j]);
+      return `<td class="num${o?" chg":""}">${o||x!==0?x:"-"}</td>`;}).join("");
+    return `<tr>${bc}<td class="${hl(r).all?"chg":""}">${hesc(r.bn)}</td>${q}<td class="rmk">${hesc(r.note||"")}</td></tr>`;
+  }).join("");
+  const nTail=v.labels.length;
   return `<div class="tscroll"><div class="pvwrap">
     <div class="t1">${v.vendor===v.item?hesc(v.item):`${hesc(v.vendor)} (${hesc(v.item)})`} 발주 내역</div>
     <div class="t2">마스터: ${hesc(m.master)}${m.prevName?` · 직전: ${hesc(m.prevName)}`:""} · 사업자등록번호 기준 대조</div>
     <div class="t3">${m.prev
       ?"※ 빨간 글씨 + 노란 바탕 = 직전 발송본 대비 변경 항목. 취소 건은 수량 0 표기."
       :"※ 1차 발송본. 비교 대상 없음, 변경 표시 없음."}</div>
-    <table class="xl"><thead><tr>
-      <th>연번</th><th>사업자등록번호</th><th>업체명</th><th>부스번호</th>
-      ${v.labels.map(l=>`<th>${hesc(l)}</th>`).join("")}<th>비고</th></tr></thead>
+    <table class="xl"><thead>${headHtml(v)}</thead>
     <tbody>${body}
-      <tr class="tot"><td></td><td></td><td class="num">합계</td><td></td>
+      <tr class="tot">${"<td></td>".repeat(3)}<td class="num">합계</td>${"<td></td>".repeat(10)}<td></td>
       ${v.partTotals.map(t=>`<td class="num">${t}</td>`).join("")}<td></td></tr></tbody></table>
     <div class="pvfoot">변경 ${v.changed}건 · 총 ${v.rows.length}행 · 합계 ${v.total}
       &nbsp;·&nbsp; ${hesc(fileNameFor(v.tag,m))}</div>
